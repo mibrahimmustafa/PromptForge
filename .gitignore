@@ -1,0 +1,23 @@
+# Build output
+target/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local overrides - never commit API keys
+application-local.yml
+.env

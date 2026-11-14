@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PromptForge - reshape any prompt into a best-practice prompt</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9881;</text></svg>">
+</head>
+<body>
+<header class="topbar">
+    <div class="brand">
+        <span class="brand-mark">PF</span>
+        <div>
+            <h1>PromptForge</h1>
+            <p>Reshape any rough request into a best-practice prompt</p>
+        </div>
+    </div>
+    <div class="topbar-meta">
+        <span class="badge" id="engine-badge">Local engine</span>
+        <span class="badge subtle" id="llm-badge">LLM: not configured</span>
+    </div>
+</header>
+
+<main class="layout">
+    <!-- ------------------------------------------------------------------ input -->
+    <section class="panel">
+        <div class="panel-head">
+            <h2>1. Your rough prompt</h2>
+            <span class="counter"><span id="word-count">0</span> words</span>
+        </div>
+
+        <textarea id="prompt" spellcheck="false"
+                  placeholder="Paste the prompt as you would type it today. e.g.&#10;&#10;can you write me a good post about our new api, it should be professional and not too long, for developers"></textarea>
+
+        <div class="samples">
+            <span class="samples-label">Try:</span>
+            <button class="chip sample" data-sample="vague">Vague request</button>
+            <button class="chip sample" data-sample="code">Coding task</button>
+            <button class="chip sample" data-sample="analysis">Data analysis</button>
+            <button class="chip sample" data-sample="writing">Writing task</button>
+        </div>
+
+        <div class="field-row">
+            <label class="field">
+                <span>Domain profile</span>
+                <select id="profile"></select>
+            </label>
+            <label class="field">
+                <span>Engine</span>
+                <select id="engine">
+                    <option value="RULE">Local rule-based</option>
+                    <option value="LLM">LLM (grounded in analysis)</option>
+                </select>
+            </label>
+            <label class="field" id="provider-field" hidden>
+                <span>Provider</span>
+                <select id="provider"></select>
+            </label>
+        </div>
+
+        <div class="options">
+            <label class="check"><input type="checkbox" id="include-examples" checked> Include an Examples section</label>
+            <label class="check"><input type="checkbox" id="strict"> Template mode (keep placeholders)</label>
+        </div>
+
+        <div class="actions">
+            <button class="primary" id="reshape">Reshape prompt</button>
+            <button class="ghost" id="clear">Clear</button>
+            <span class="hint">Shortcuts: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to reshape</span>
+        </div>
+    </section>
+
+    <!-- ------------------------------------------------------------------ output -->
+    <section class="panel" id="results-panel">
+        <div class="panel-head">
+            <h2>2. Analysis &amp; result</h2>
+            <span class="counter" id="result-meta"></span>
+        </div>
+
+        <div id="empty-state" class="empty">
+            <div class="empty-icon">&#9881;</div>
+            <p><strong>Nothing analysed yet.</strong></p>
+            <p class="muted">The local engine checks the prompt against seven best-practice
+                dimensions, then rebuilds it with the gaps filled in. No API key needed.</p>
+        </div>
+
+        <div id="result" hidden>
+            <div class="score-row">
+                <div class="score-ring" id="score-ring">
+                    <svg viewBox="0 0 120 120">
+                        <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+                        <circle class="ring-fg" id="ring-fg" cx="60" cy="60" r="52"></circle>
+                    </svg>
+                    <div class="score-value"><span id="score">0</span><small>/100</small></div>
+                </div>
+                <div class="score-info">
+                    <p class="grade" id="grade">&nbsp;</p>
+                    <p class="muted" id="score-hint">&nbsp;</p>
+                </div>
+            </div>
+
+            <div class="dimensions" id="dimensions"></div>
+
+            <div class="tabs" role="tablist">
+                <button class="tab active" data-tab="reshaped" role="tab">Reshaped prompt</button>
+                <button class="tab" data-tab="template" role="tab">Template</button>
+                <button class="tab" data-tab="questions" role="tab">Clarifying questions</button>
+                <button class="tab" data-tab="findings" role="tab">Findings</button>
+            </div>
+
+            <div class="tab-panel" id="tab-reshaped">
+                <div class="pane-head">
+                    <span class="muted" id="reshaped-note"></span>
+                    <button class="copy" data-copy="reshaped-prompt">Copy</button>
+                </div>
+                <pre class="output" id="reshaped-prompt"></pre>
+            </div>
+
+            <div class="tab-panel" id="tab-template" hidden>
+                <div class="pane-head">
+                    <span class="muted">Same skeleton with explicit gaps - fill them in yourself.</span>
+                    <button class="copy" data-copy="template-prompt">Copy</button>
+                </div>
+                <pre class="output" id="template-prompt"></pre>
+            </div>
+
+            <div class="tab-panel" id="tab-questions" hidden>
+                <div class="pane-head">
+                    <span class="muted">Answer these to close the remaining gaps.</span>
+                    <button class="copy" data-copy="questions">Copy</button>
+                </div>
+                <ul class="questions" id="questions"></ul>
+            </div>
+
+            <div class="tab-panel" id="tab-findings" hidden>
+                <div class="pane-head">
+                    <span class="muted">What the analyzer found in your prompt.</span>
+                </div>
+                <ul class="findings" id="findings"></ul>
+            </div>
+        </div>
+    </section>
+</main>
+
+<footer class="footer">
+    <span>PromptForge &middot; Java + Spring Boot (Jakarta EE) &middot; local-first engine, optional LLM</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

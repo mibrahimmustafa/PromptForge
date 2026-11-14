@@ -1,0 +1,33 @@
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: always
+
+spring:
+  application:
+    name: prompt-forge
+  jackson:
+    default-property-inclusion: non_null
+  web:
+    resources:
+      static-locations: classpath:/static/
+
+promptforge:
+  llm:
+    # auto | anthropic | openai | gemini
+    provider: ${LLM_PROVIDER:auto}
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+      model: ${ANTHROPIC_MODEL:claude-sonnet-5-5}
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      model: ${OPENAI_MODEL:gpt-5.5}
+    gemini:
+      api-key: ${GEMINI_API_KEY:}
+      model: ${GEMINI_MODEL:gemini-3.8-flash}
+    max-tokens: ${LLM_MAX_TOKENS:4000}
+    timeout-seconds: ${LLM_TIMEOUT_SECONDS:60}
+
+logging:
+  level:
+    com.promptforge: INFO
