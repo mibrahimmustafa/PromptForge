@@ -1,0 +1,59 @@
+# PromptForge - systemd unit (bare-metal deployment, no Docker).
+#
+#   sudo useradd --system --home /opt/prompt-forge --shell /usr/sbin/nologin promptforge
+#   sudo mkdir -p /opt/prompt-forge /etc/prompt-forge
+#   sudo cp target/prompt-forge-*.jar /opt/prompt-forge/prompt-forge.jar
+#   sudo cp deploy/prompt-forge.env.example /etc/prompt-forge/prompt-forge.env
+#   sudo chmod 600 /etc/prompt-forge/prompt-forge.env
+#   sudo cp deploy/prompt-forge.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now prompt-forge
+
+[Unit]
+Description=PromptForge - prompt reshaping service
+Documentation=https://github.com/your-org/prompt-forge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=promptforge
+Group=promptforge
+WorkingDirectory=/opt/prompt-forge
+
+# Secrets live here, not in the unit file. chmod 600, owned by root.
+EnvironmentFile=/etc/prompt-forge/prompt-forge.env
+
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=75 -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError -jar /opt/prompt-forge/prompt-forge.jar
+ExecReload=/bin/kill -HUP $MAIN_PID
+
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=5
+
+# Give the process time to finish in-flight requests during a restart.
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# ---- hardening ----
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/opt/prompt-forge
+
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

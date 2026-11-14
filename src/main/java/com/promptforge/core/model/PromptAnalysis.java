@@ -18,6 +18,7 @@ import java.util.List;
  * @param extractedConstraints constraint sentences lifted out of the prompt
  * @param extractedFormat   output format found in the prompt, if any
  * @param extractedExamples example lines lifted out of the prompt
+ * @param cleanedRequest    the request with politeness wrappers removed
  * @param taskType          inferred type of work
  * @param taskStatement     the actionable core of the prompt
  */
@@ -35,6 +36,7 @@ public record PromptAnalysis(
         List<String> extractedConstraints,
         String extractedFormat,
         List<String> extractedExamples,
+        String cleanedRequest,
         TaskType taskType,
         String taskStatement) {
 

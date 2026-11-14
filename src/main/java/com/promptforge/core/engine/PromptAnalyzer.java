@@ -257,6 +257,7 @@ public class PromptAnalyzer {
                 constraints,
                 format,
                 examples,
+                stripped,
                 taskType,
                 taskStatement);
     }
@@ -652,6 +653,20 @@ public class PromptAnalyzer {
                 note.append("; goal: ").append(goal);
             }
             dimensions.add(new DimensionScore(Dimension.CONTEXT, 1.0, true, note.toString()));
+        } else if (stack != null) {
+            // The stack alone is a hint of context, but not the context itself.
+            dimensions.add(new DimensionScore(Dimension.CONTEXT, 0.5, true,
+                    "Only the stack is specified (" + stack + ") - no audience, background or goal"));
+            diagnostics.add(new Diagnostic(
+                    "NO_CONTEXT",
+                    "No context, audience or goal",
+                    "Only the technology stack is given. The model still has to assume who the output is "
+                            + "for and what it is used for - most weak answers come from missing context, "
+                            + "not from a weak model.",
+                    Severity.WARNING,
+                    Dimension.CONTEXT,
+                    "Add who the output is for, the surrounding situation, and what success is used for.",
+                    false));
         } else {
             dimensions.add(new DimensionScore(Dimension.CONTEXT, 0.0, false,
                     "No background, audience or goal supplied"));

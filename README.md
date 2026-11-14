@@ -6,6 +6,13 @@ to answer.
 
 Java · Spring Boot 4 (Jakarta EE) · local-first engine, optional LLM upgrade.
 
+| Document | Purpose |
+|---|---|
+| **This file** | Operator guide and quick start |
+| [`DEPLOYMENT.md`](DEPLOYMENT.md) | Production deployment — Docker, systemd, Kubernetes, security checklist |
+| [`docs/SRD.md`](docs/SRD.md) | Software Requirements Document — functional/non-functional requirements, data model, API spec, traceability matrix |
+| [`architecture.json`](architecture.json) | Machine-readable architecture — layers, components, domain model, API, algorithms, configuration |
+
 ---
 
 ## Why this exists
@@ -32,17 +39,37 @@ PromptForge measures exactly these gaps, then rebuilds the prompt around them.
 | Role           | 10%    | Expertise and seniority stated up front                                  |
 | Examples       | 8%     | One representative sample of a good answer                               |
 
-The weighted total is the **prompt quality score** (0–100).
+The weighted total is the **prompt quality score** (0–100), banded as
+`Excellent ≥ 85 · Good ≥ 70 · Fair ≥ 50 · Weak ≥ 30 · Poor`.
 
 ## What you get back
 
 1. **Score & grade** – the weighted score plus a per-dimension breakdown.
-2. **Findings** – every gap, ranked `Critical / Warning / Info`, each with a prompt-specific
-   fix (e.g. *conflicting scopes: "simple" and "comprehensive"*).
+2. **Findings** – every gap, ranked `Critical / Warning / Info`, each with a prompt-specific fix.
 3. **Reshaped prompt** – a complete, usable prompt with the gaps filled in.
 4. **Template** – the same skeleton with explicit `<placeholders>` where information is still
    missing, so nothing is silently invented.
 5. **Clarifying questions** – the short list of answers that would close the remaining gaps.
+
+### The findings it can raise
+
+| Code | Severity | Fires when |
+|---|---|---|
+| `EMPTY_PROMPT` | Critical | There is nothing to reshape. |
+| `NO_TASK` | Critical | No action verb and no question — nothing states what to produce. |
+| `NO_OUTPUT_FORMAT` | Critical | No required output shape. The highest-leverage omission. |
+| `TOO_SHORT` | Critical | Fewer than 12 words — too much is left to assumption. |
+| `NO_ROLE` | Warning | No persona stated (auto-fixed when a role can be inferred). |
+| `NO_CONTEXT` | Warning | No audience, background or goal. |
+| `NO_CONSTRAINTS` | Warning | No limits or exclusions. |
+| `NO_ACCEPTANCE` | Warning | No definition of done. |
+| `VAGUE_TERMS` | Warning | Unfalsifiable wording (`professional`, `good`, `etc.`) — the terms are named. |
+| `CONFLICTING_SCOPES` | Warning | Two terms that cannot both be satisfied (`simple` + `comprehensive`). |
+| `MULTIPLE_DELIVERABLES` | Warning | Many different actions in one prompt. |
+| `POLITE_FRAME` | Info | `can you …`, `I need you to …` — stripped automatically. |
+| `NO_EXAMPLES` | Info | No sample of a good answer. |
+| `TOO_LONG` / `WALL_OF_TEXT` | Info | Structuring would help. |
+| `CHAINED_REQUESTS` | Info | Several requests chained with `and also` / `and then`. |
 
 ## Quick start
 
@@ -75,7 +102,7 @@ Requirements: JDK 17+ (tested on JDK 22). Maven is not needed — the Maven Wrap
   "profile": "WRITING",       // GENERALIST | CODING | DATA_ANALYSIS | WRITING | RESEARCH | PRODUCT | BUSINESS
   "engine": "RULE",           // RULE | LLM
   "includeExamples": true,
-  "strict": false,            // template mode: keep placeholders for missing sections
+  "strict": false,            // template mode: the reshaped prompt keeps its <placeholders>
   "provider": null,           // anthropic | openai | gemini (LLM engine only)
   "model": null               // optional model id override
 }
@@ -103,27 +130,34 @@ Response:
 }
 ```
 
+A blank prompt returns `400` with `{"error": "Validation failed", "fields": {"prompt": "…"}}`.
+
 ### `GET /api/meta`
 
 Profiles, the dimension anatomy, and which LLM providers are configured.
 
 ### `GET /api/health`
 
-Liveness probe.
+Liveness probe — `{"status":"UP"}`.
 
 ## The two engines
 
 ### 1. Local rule-based engine (default)
 
-Pure Java, deterministic, offline, no API key, no cost, no prompt data leaving the machine.
+Pure Java, deterministic, offline, no API key, no cost, and no prompt data leaving the machine.
 It is a pattern-matching analyzer (`PromptAnalyzer`) plus a template-driven rewriter
 (`PromptRewriter`):
 
-- strips politeness frames (`can you…`, `I want you to…`);
-- detects role, audience, stack, goal, constraints and output format;
-- flags vagueness (`professional`, `good`, `etc.`), conflicting scopes (`simple` + `comprehensive`)
-  and chained or multi-deliverable requests;
-- infers the task type and injects the matching defaults for role, format and acceptance criteria.
+- strips politeness frames (`can you…`, `I need you to…`, `I want to…`, `help me…`);
+- detects role, audience, stack, goal, constraints, output format and examples;
+- extracts constraint **clauses**, not whole sentences — *"Use only Spring Boot and JPA"* keeps its
+  second half, while *"it should be professional and not too long"* splits into two constraints;
+- ignores format words that are not output formats — *"our sales **csv**"* is an input file, not a
+  requested output shape;
+- de-duplicates the stack — *"Java, Spring Boot, JPA, REST"*, not *"…, Spring, …"*;
+- infers the task type and injects the matching defaults for role, format and acceptance criteria;
+- **never loses the request**: when no action can be extracted, the original wording is quoted into
+  the Task section instead of degrading into a generic instruction.
 
 ### 2. LLM engine (optional)
 
@@ -160,8 +194,26 @@ src/main/java/com/promptforge/
 ├── service/             # orchestration, rule engine first, LLM upgrade second
 └── web/                 # REST controller + error handling
 src/main/resources/static/   # single-page UI (plain HTML/CSS/JS, no build step)
-src/test/java/                # 27 tests over the engine and the HTTP layer
+src/test/java/                # 32 tests over the engine and the HTTP layer
+deploy/                       # nginx config, systemd unit, env template
+docs/SRD.md                   # Software Requirements Document
+architecture.json             # machine-readable architecture
+DEPLOYMENT.md                 # production deployment guide
 ```
+
+## Deploying
+
+```bash
+# container (recommended)
+docker compose up -d --build
+
+# or the plain jar behind systemd
+./mvnw clean package
+sudo cp target/prompt-forge-1.0.0.jar /opt/prompt-forge/prompt-forge.jar
+```
+
+Full instructions, the security checklist and the Kubernetes manifests are in
+[`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## Testing
 
@@ -169,9 +221,10 @@ src/test/java/                # 27 tests over the engine and the HTTP layer
 mvnw test
 ```
 
-Covers the analyzer (scoring, politeness stripping, contradiction detection, extraction),
-the rewriter (section completeness, placeholder handling, constraint carry-over) and the HTTP
-layer (success path, validation error, metadata).
+32 tests covering the analyzer (scoring, politeness stripping, constraint clause extraction,
+format detection, stack de-duplication, contradiction and vagueness detection), the rewriter
+(section completeness, placeholder policy, constraint carry-over, request preservation) and the
+HTTP layer (success path, validation error, metadata, health).
 
 ## Design notes
 
@@ -182,3 +235,5 @@ layer (success path, validation error, metadata).
   matter.
 - **The LLM path is additive.** It refines the rule-based output; it never becomes a hard
   dependency.
+- **Findings explain themselves.** Every diagnostic names the evidence it saw and gives a fix you
+  can apply, rather than a generic lecture.

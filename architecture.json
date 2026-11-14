@@ -1,0 +1,521 @@
+{
+  "project": {
+    "id": "prompt-forge",
+    "name": "PromptForge",
+    "version": "1.0.0",
+    "summary": "Reshapes any rough prompt into a best-practice prompt: a quality score, the gaps found, a ready-to-paste rewrite, a fill-in-the-blank template, and the clarifying questions still open.",
+    "domain": "developer-tooling / llm-prompt-engineering",
+    "license": "unlicensed-internal",
+    "documentation": {
+      "readme": "README.md",
+      "requirements": "docs/SRD.md",
+      "architecture": "architecture.json"
+    }
+  },
+
+  "technologyStack": {
+    "language": {
+      "name": "Java",
+      "minimumVersion": "17",
+      "verifiedVersion": "22.0.1"
+    },
+    "framework": {
+      "name": "Spring Boot",
+      "version": "4.1.2",
+      "programmingModel": "Jakarta EE (jakarta.servlet, jakarta.validation)"
+    },
+    "runtime": {
+      "applicationServer": "Apache Tomcat 11 (embedded)",
+      "port": 8080,
+      "portEnvVar": "SERVER_PORT"
+    },
+    "serialization": {
+      "library": "Jackson 3",
+      "groupId": "tools.jackson.core",
+      "packages": ["tools.jackson.databind"],
+      "notes": "Spring Boot 4 ships Jackson 3; the com.fasterxml.jackson.databind packages are not on the classpath."
+    },
+    "httpClient": {
+      "library": "java.net.http.HttpClient (JDK built-in)",
+      "usedFor": ["anthropic", "openai", "gemini"]
+    },
+    "build": {
+      "tool": "Maven",
+      "version": "3.9.9",
+      "wrapper": true,
+      "wrapperFiles": ["mvnw", "mvnw.cmd", ".mvn/wrapper/maven-wrapper.jar", ".mvn/wrapper/maven-wrapper.properties"],
+      "artifacts": ["target/prompt-forge-1.0.0.jar"]
+    },
+    "testing": {
+      "framework": "JUnit Jupiter 6",
+      "assertions": "AssertJ",
+      "httpTesting": "Spring MockMvc (spring-boot-starter-webmvc-test)",
+      "totalTests": 32,
+      "distribution": {
+        "PromptAnalyzerTest": 17,
+        "PromptRewriterTest": 9,
+        "PromptControllerTest": 6
+      }
+    },
+    "frontend": {
+      "type": "server-rendered static assets",
+      "stack": ["HTML5", "CSS3 (custom properties)", "vanilla JavaScript (ES5-compatible IIFE)"],
+      "buildStep": false,
+      "location": "src/main/resources/static"
+    },
+    "runtimeDependencies": [],
+    "externalServices": [
+      {
+        "id": "anthropic",
+        "protocol": "https",
+        "endpoint": "https://api.anthropic.com/v1/messages",
+        "auth": "x-api-key header",
+        "apiVersionHeader": "anthropic-version: 2023-06-01",
+        "required": false
+      },
+      {
+        "id": "openai",
+        "protocol": "https",
+        "endpoint": "https://api.openai.com/v1/chat/completions",
+        "auth": "Authorization: Bearer header",
+        "required": false
+      },
+      {
+        "id": "gemini",
+        "protocol": "https",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        "auth": "x-goog-api-key header",
+        "required": false
+      }
+    ]
+  },
+
+  "architectureStyle": {
+    "name": "layered-hexagonal-core",
+    "description": "A pure, framework-free analysis core surrounded by adapters. The core has no Spring imports and no I/O, so it is deterministic, fast to test, and portable to another stack.",
+    "dependencyRule": "web -> service -> core; llm <- service; core depends on nothing but the JDK and its own model package.",
+    "corePurity": {
+      "springImports": false,
+      "ioOperations": false,
+      "deterministic": true
+    }
+  },
+
+  "layers": [
+    {
+      "id": "presentation",
+      "name": "Presentation",
+      "packages": ["com.promptforge.web", "src/main/resources/static"],
+      "responsibility": "HTTP contract, request validation, JSON error shaping, and the single-page UI.",
+      "dependsOn": ["application", "domain"]
+    },
+    {
+      "id": "application",
+      "name": "Application",
+      "packages": ["com.promptforge.service"],
+      "responsibility": "Orchestrates the pipeline: analyse -> rewrite -> (optional) LLM upgrade -> fallback. Owns the engine-selection policy.",
+      "dependsOn": ["domain", "infrastructure"]
+    },
+    {
+      "id": "domain",
+      "name": "Domain",
+      "packages": ["com.promptforge.core.engine", "com.promptforge.core.model"],
+      "responsibility": "The prompt anatomy, the scoring model, the diagnostics catalogue, the rewrite rules and the output templates.",
+      "dependsOn": []
+    },
+    {
+      "id": "infrastructure",
+      "name": "Infrastructure",
+      "packages": ["com.promptforge.llm"],
+      "responsibility": "Outbound calls to LLM providers plus the configuration that enables them.",
+      "dependsOn": []
+    }
+  ],
+
+  "components": [
+    {
+      "id": "prompt-forge-application",
+      "name": "PromptForgeApplication",
+      "package": "com.promptforge",
+      "type": "spring-boot-application",
+      "responsibility": "Entry point. Boots the context and enables configuration-properties scanning.",
+      "dependsOn": []
+    },
+    {
+      "id": "prompt-analyzer",
+      "name": "PromptAnalyzer",
+      "package": "com.promptforge.core.engine",
+      "type": "domain-service",
+      "responsibility": "Reads the prompt, detects role, task, audience, stack, goal, constraints, format and examples, scores the seven anatomy dimensions and produces ordered diagnostics.",
+      "keyMethods": ["analyze", "findTask", "findRole", "findAudience", "findStack", "findGoal", "findConstraints", "findFormat", "findExamples", "splitClauses", "scoreContext"],
+      "dependsOn": ["domain-lexicon", "text-util", "domain-model"]
+    },
+    {
+      "id": "prompt-rewriter",
+      "name": "PromptRewriter",
+      "package": "com.promptforge.core.engine",
+      "type": "domain-service",
+      "responsibility": "Builds the reshaped prompt, the placeholder template and the clarifying questions from an analysis.",
+      "keyMethods": ["rewrite", "resolveRole", "resolveTask", "buildQuestions", "orPlaceholder"],
+      "dependsOn": ["prompt-templates", "domain-lexicon", "text-util", "domain-model"]
+    },
+    {
+      "id": "prompt-templates",
+      "name": "PromptTemplates",
+      "package": "com.promptforge.core.engine",
+      "type": "data-holder",
+      "responsibility": "Default role, output format, acceptance criteria and constraints per task type.",
+      "dependsOn": ["domain-model"]
+    },
+    {
+      "id": "domain-lexicon",
+      "name": "DomainLexicon",
+      "package": "com.promptforge.core.engine",
+      "type": "data-holder",
+      "responsibility": "Vocabulary: domain-to-role map, task-type keywords, action verbs, unmeasurable words, conflicting term pairs.",
+      "dependsOn": []
+    },
+    {
+      "id": "text-util",
+      "name": "TextUtil",
+      "package": "com.promptforge.core.engine",
+      "type": "utility",
+      "responsibility": "Sentence and clause splitting, sentence casing, bullet stripping.",
+      "dependsOn": []
+    },
+    {
+      "id": "domain-model",
+      "name": "Domain model",
+      "package": "com.promptforge.core.model",
+      "type": "records-and-enums",
+      "responsibility": "Dimension, Severity, TaskType, PromptProfile, Engine, Diagnostic, DimensionScore, PromptAnalysis, PromptRequest, PromptResult.",
+      "dependsOn": []
+    },
+    {
+      "id": "prompt-reshape-service",
+      "name": "PromptReshapeService",
+      "package": "com.promptforge.service",
+      "type": "application-service",
+      "responsibility": "Runs the rule engine, then optionally upgrades the rewrite with an LLM that is grounded in the analyzer findings. Falls back to the rule result on any provider failure.",
+      "keyMethods": ["reshape", "reshapeWithLlm", "systemPrompt", "userPrompt", "parse"],
+      "dependsOn": ["prompt-analyzer", "prompt-rewriter", "llm-gateway", "domain-model"]
+    },
+    {
+      "id": "llm-gateway",
+      "name": "LlmGateway",
+      "package": "com.promptforge.llm",
+      "type": "gateway",
+      "responsibility": "Resolves the provider to use (explicit override, configured preference, or auto-detect) and reports which providers have a usable key.",
+      "dependsOn": ["llm-properties", "anthropic-client", "openai-client", "gemini-client"]
+    },
+    {
+      "id": "llm-properties",
+      "name": "LlmProperties",
+      "package": "com.promptforge.llm",
+      "type": "configuration",
+      "responsibility": "Binds promptforge.llm.* - provider preference, per-provider key and model, max tokens, timeout.",
+      "dependsOn": []
+    },
+    {
+      "id": "anthropic-client",
+      "name": "AnthropicLlmClient",
+      "package": "com.promptforge.llm",
+      "type": "outbound-adapter",
+      "responsibility": "Calls the Anthropic Messages API and concatenates the text content blocks.",
+      "dependsOn": ["http-llm-support"]
+    },
+    {
+      "id": "openai-client",
+      "name": "OpenAiLlmClient",
+      "package": "com.promptforge.llm",
+      "type": "outbound-adapter",
+      "responsibility": "Calls the OpenAI Chat Completions API and reads choices[0].message.content.",
+      "dependsOn": ["http-llm-support"]
+    },
+    {
+      "id": "gemini-client",
+      "name": "GeminiLlmClient",
+      "package": "com.promptforge.llm",
+      "type": "outbound-adapter",
+      "responsibility": "Calls the Gemini generateContent API with a system instruction and concatenates the candidate parts.",
+      "dependsOn": ["http-llm-support"]
+    },
+    {
+      "id": "http-llm-support",
+      "name": "HttpLlmSupport",
+      "package": "com.promptforge.llm",
+      "type": "utility",
+      "responsibility": "Shared HTTP plumbing: JSON build/parse, status handling, timeout, safe error messages.",
+      "dependsOn": []
+    },
+    {
+      "id": "prompt-controller",
+      "name": "PromptController",
+      "package": "com.promptforge.web",
+      "type": "rest-controller",
+      "responsibility": "Exposes POST /api/reshape, GET /api/meta and GET /api/health.",
+      "dependsOn": ["prompt-reshape-service", "llm-gateway", "domain-model"]
+    },
+    {
+      "id": "api-exception-handler",
+      "name": "ApiExceptionHandler",
+      "package": "com.promptforge.web",
+      "type": "rest-controller-advice",
+      "responsibility": "Converts validation and unexpected failures into a consistent JSON error shape.",
+      "dependsOn": []
+    },
+    {
+      "id": "web-ui",
+      "name": "PromptForge UI",
+      "package": "src/main/resources/static",
+      "type": "single-page-ui",
+      "responsibility": "Prompt input, profile and engine controls, sample prompts, score ring, dimension bars, and the four result tabs (reshaped, template, questions, findings).",
+      "dependsOn": ["prompt-controller"]
+    }
+  ],
+
+  "domainModel": {
+    "promptAnatomy": {
+      "description": "The seven dimensions every prompt is measured against. The score is the weighted sum, expressed 0-100.",
+      "scoring": "score = round(100 * sum(dimensionScore * dimensionWeight))",
+      "dimensions": [
+        { "id": "ROLE", "label": "Role", "weight": 0.10, "meaning": "Who the AI should be: expertise and seniority." },
+        { "id": "TASK", "label": "Task", "weight": 0.20, "meaning": "One explicit action and one named deliverable." },
+        { "id": "CONTEXT", "label": "Context", "weight": 0.16, "meaning": "Audience, background, stack and the goal behind the request." },
+        { "id": "CONSTRAINTS", "label": "Constraints", "weight": 0.16, "meaning": "Hard limits and explicit exclusions." },
+        { "id": "OUTPUT_FORMAT", "label": "Output format", "weight": 0.16, "meaning": "The required shape of the response." },
+        { "id": "EXAMPLES", "label": "Examples", "weight": 0.08, "meaning": "One representative sample of a good answer." },
+        { "id": "ACCEPTANCE", "label": "Acceptance criteria", "weight": 0.14, "meaning": "Checkable conditions for success." }
+      ],
+      "grades": [
+        { "grade": "Excellent", "minScore": 85 },
+        { "grade": "Good", "minScore": 70 },
+        { "grade": "Fair", "minScore": 50 },
+        { "grade": "Weak", "minScore": 30 },
+        { "grade": "Poor", "minScore": 0 }
+      ],
+      "severities": [
+        { "id": "CRITICAL", "label": "Critical", "meaning": "The prompt cannot produce a reliable result without this." },
+        { "id": "WARNING", "label": "Warning", "meaning": "The result will be noticeably weaker than it could be." },
+        { "id": "INFO", "label": "Info", "meaning": "An improvement that is optional or stylistic." }
+      ]
+    },
+    "diagnostics": [
+      { "code": "EMPTY_PROMPT", "severity": "CRITICAL", "dimension": null, "title": "Prompt is empty", "autoFixed": false },
+      { "code": "NO_TASK", "severity": "CRITICAL", "dimension": "TASK", "title": "No actionable task", "autoFixed": false },
+      { "code": "NO_OUTPUT_FORMAT", "severity": "CRITICAL", "dimension": "OUTPUT_FORMAT", "title": "No output format specified", "autoFixed": false },
+      { "code": "TOO_SHORT", "severity": "CRITICAL", "dimension": null, "title": "Prompt is too short to be specific", "autoFixed": false },
+      { "code": "NO_ROLE", "severity": "WARNING", "dimension": "ROLE", "title": "No role or persona defined", "autoFixed": true },
+      { "code": "NO_CONTEXT", "severity": "WARNING", "dimension": "CONTEXT", "title": "No context, audience or goal", "autoFixed": false },
+      { "code": "NO_CONSTRAINTS", "severity": "WARNING", "dimension": "CONSTRAINTS", "title": "No constraints or exclusions", "autoFixed": false },
+      { "code": "NO_ACCEPTANCE", "severity": "WARNING", "dimension": "ACCEPTANCE", "title": "No acceptance criteria", "autoFixed": false },
+      { "code": "VAGUE_TERMS", "severity": "WARNING", "dimension": null, "title": "Unfalsifiable wording detected", "autoFixed": false },
+      { "code": "CONFLICTING_SCOPES", "severity": "WARNING", "dimension": null, "title": "Conflicting scope", "autoFixed": false },
+      { "code": "MULTIPLE_DELIVERABLES", "severity": "WARNING", "dimension": null, "title": "Many different actions in one prompt", "autoFixed": false },
+      { "code": "POLITE_FRAME", "severity": "INFO", "dimension": "TASK", "title": "Request is wrapped in politeness", "autoFixed": true },
+      { "code": "NO_EXAMPLES", "severity": "INFO", "dimension": "EXAMPLES", "title": "No example of a good answer", "autoFixed": false },
+      { "code": "TOO_LONG", "severity": "INFO", "dimension": null, "title": "Prompt is very long", "autoFixed": true },
+      { "code": "WALL_OF_TEXT", "severity": "INFO", "dimension": null, "title": "Prompt is a single dense block", "autoFixed": true },
+      { "code": "CHAINED_REQUESTS", "severity": "INFO", "dimension": null, "title": "Several requests chained together", "autoFixed": false }
+    ],
+    "profiles": [
+      { "id": "GENERALIST", "label": "Generalist", "taskType": "GENERAL" },
+      { "id": "CODING", "label": "Coding", "taskType": "CODE" },
+      { "id": "DATA_ANALYSIS", "label": "Data analysis", "taskType": "DATA" },
+      { "id": "WRITING", "label": "Writing", "taskType": "WRITING" },
+      { "id": "RESEARCH", "label": "Research", "taskType": "RESEARCH" },
+      { "id": "PRODUCT", "label": "Product", "taskType": "PRODUCT" },
+      { "id": "BUSINESS", "label": "Business", "taskType": "BUSINESS" }
+    ],
+    "taskTypes": ["CODE", "DATA", "WRITING", "RESEARCH", "PRODUCT", "BUSINESS", "GENERAL"],
+    "engines": [
+      { "id": "RULE", "label": "Rule-based", "requiresNetwork": false, "requiresKey": false, "deterministic": true },
+      { "id": "LLM", "label": "LLM", "requiresNetwork": true, "requiresKey": true, "deterministic": false, "groundedInAnalysis": true, "fallback": "RULE" }
+    ],
+    "llmProviders": [
+      { "id": "anthropic", "defaultModel": "claude-sonnet-5-5", "apiKeyEnv": "ANTHROPIC_API_KEY", "modelEnv": "ANTHROPIC_MODEL" },
+      { "id": "openai", "defaultModel": "gpt-5.5", "apiKeyEnv": "OPENAI_API_KEY", "modelEnv": "OPENAI_MODEL" },
+      { "id": "gemini", "defaultModel": "gemini-3.8-flash", "apiKeyEnv": "GEMINI_API_KEY", "modelEnv": "GEMINI_MODEL" }
+    ]
+  },
+
+  "api": {
+    "basePath": "/api",
+    "contentType": "application/json",
+    "errorShape": {
+      "error": "string",
+      "timestamp": "ISO-8601 string",
+      "fields": "optional map of field -> message (validation failures only)"
+    },
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/api/reshape",
+        "purpose": "Analyse a prompt and return the reshape result.",
+        "request": {
+          "type": "PromptRequest",
+          "fields": [
+            { "name": "prompt", "type": "string", "required": true, "constraints": "must not be blank" },
+            { "name": "profile", "type": "string", "required": false, "default": "GENERALIST", "values": ["GENERALIST", "CODING", "DATA_ANALYSIS", "WRITING", "RESEARCH", "PRODUCT", "BUSINESS"] },
+            { "name": "engine", "type": "string", "required": false, "default": "RULE", "values": ["RULE", "LLM"] },
+            { "name": "strict", "type": "boolean", "required": false, "default": false, "meaning": "Template mode: the reshaped prompt keeps its <placeholders> instead of the filled-in defaults." },
+            { "name": "includeExamples", "type": "boolean", "required": false, "default": true },
+            { "name": "provider", "type": "string", "required": false, "values": ["anthropic", "openai", "gemini"], "meaning": "Overrides the configured provider for this call." },
+            { "name": "model", "type": "string", "required": false, "meaning": "Overrides the configured model id for this call." }
+          ]
+        },
+        "response": {
+          "type": "PromptResult",
+          "status": 200,
+          "fields": [
+            { "name": "original", "type": "string" },
+            { "name": "reshapedPrompt", "type": "string", "meaning": "Complete, usable prompt with labelled defaults for the gaps." },
+            { "name": "templatePrompt", "type": "string", "meaning": "Same skeleton with <placeholders> where information is still missing." },
+            { "name": "questions", "type": "string[]", "meaning": "Clarifying questions that would close the remaining gaps." },
+            { "name": "analysis", "type": "PromptAnalysis" },
+            { "name": "engineUsed", "type": "string" },
+            { "name": "notes", "type": "string[]", "meaning": "Engine notes, e.g. a fallback notice." }
+          ]
+        },
+        "errors": [
+          { "status": 400, "condition": "prompt is blank", "shape": "error + fields" },
+          { "status": 500, "condition": "unexpected failure", "shape": "error" }
+        ]
+      },
+      {
+        "method": "GET",
+        "path": "/api/meta",
+        "purpose": "Metadata for the UI: profiles, dimension anatomy, configured providers.",
+        "response": {
+          "status": 200,
+          "fields": [
+            { "name": "profiles", "type": "array" },
+            { "name": "dimensions", "type": "array" },
+            { "name": "llmProviders", "type": "string[]" },
+            { "name": "llmAvailable", "type": "boolean" },
+            { "name": "anatomy", "type": "string[]" }
+          ]
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/health",
+        "purpose": "Liveness probe.",
+        "response": { "status": 200, "fields": [{ "name": "status", "type": "string", "value": "UP" }] }
+      }
+    ]
+  },
+
+  "dataFlow": [
+    {
+      "id": "rule-engine",
+      "trigger": "POST /api/reshape with engine=RULE",
+      "steps": [
+        "PromptRequest validated (jakarta.validation @NotBlank on prompt)",
+        "PromptAnalyzer.analyze(prompt, profile) -> PromptAnalysis (scores, diagnostics, extractions)",
+        "PromptRewriter.rewrite(analysis, profile, includeExamples) -> reshaped + template + questions",
+        "PromptResult returned with engineUsed = 'Rule-based'"
+      ]
+    },
+    {
+      "id": "llm-engine",
+      "trigger": "POST /api/reshape with engine=LLM",
+      "steps": [
+        "Steps 1-2 of the rule engine run first - the analysis always happens",
+        "LlmGateway.resolve(provider, model) -> optional LlmClient; empty when no key is configured",
+        "No client -> fall back to the rule result, engineUsed = 'Rule-based (fallback)', note explains why",
+        "Client available -> the analyzer findings, task type and draft template are sent as the user message",
+        "The model answers with JSON {reshapedPrompt, questions}; the service parses it leniently (code fences tolerated)",
+        "Provider error or unparsable answer -> fall back to the rule result with an explanatory note"
+      ]
+    }
+  ],
+
+  "keyAlgorithms": [
+    {
+      "name": "Frame stripping",
+      "component": "PromptAnalyzer",
+      "detail": "Removes greeting, 'can/could you', 'I need you to', 'I want to' and 'help me' wrappers, then strips a leftover 'you to', producing the cleaned request that the task and the quoted fallback are built from."
+    },
+    {
+      "name": "Task extraction",
+      "component": "PromptAnalyzer",
+      "detail": "The first word of the cleaned request is tested against the action-verb list; otherwise the first sentence carrying an action verb wins; a question counts as a task. When nothing qualifies, the request is quoted verbatim in the Task section so the intent is never lost."
+    },
+    {
+      "name": "Constraint clause splitting",
+      "component": "PromptAnalyzer",
+      "detail": "Commas and semicolons always break a clause. A conjunction breaks it only when both sides carry a constraint, so 'Use only Spring Boot and JPA' keeps its second half while 'it should be professional and not too long' splits into two constraints."
+    },
+    {
+      "name": "Format detection",
+      "component": "PromptAnalyzer",
+      "detail": "Most specific signal wins: an explicit phrase ('respond with a Markdown table containing ...'), then a format word in an output context ('in JSON'), then a format word next to an output verb. A bare format word is ignored, so 'our sales csv' (an input file) is not mistaken for a requested output format."
+    },
+    {
+      "name": "Stack de-duplication",
+      "component": "PromptAnalyzer",
+      "detail": "A generic token is dropped when a more specific token already covers it, so the stack reads 'Java, Spring Boot, JPA, REST' rather than 'Java, Spring Boot, Spring, JPA, REST'."
+    },
+    {
+      "name": "Placeholder policy",
+      "component": "PromptRewriter",
+      "detail": "The template writes known values in full and marks only real gaps with <placeholders>, so the template and the reshaped prompt never disagree about what is known. With strict=true the reshaped prompt is the template, so the caller fills the gaps instead of accepting the defaults."
+    }
+  ],
+
+  "configuration": {
+    "file": "src/main/resources/application.yml",
+    "prefix": "promptforge.llm",
+    "properties": [
+      { "key": "promptforge.llm.provider", "env": "LLM_PROVIDER", "default": "auto", "values": ["auto", "anthropic", "openai", "gemini"] },
+      { "key": "promptforge.llm.anthropic.api-key", "env": "ANTHROPIC_API_KEY", "default": "" },
+      { "key": "promptforge.llm.anthropic.model", "env": "ANTHROPIC_MODEL", "default": "claude-sonnet-5-5" },
+      { "key": "promptforge.llm.openai.api-key", "env": "OPENAI_API_KEY", "default": "" },
+      { "key": "promptforge.llm.openai.model", "env": "OPENAI_MODEL", "default": "gpt-5.5" },
+      { "key": "promptforge.llm.gemini.api-key", "env": "GEMINI_API_KEY", "default": "" },
+      { "key": "promptforge.llm.gemini.model", "env": "GEMINI_MODEL", "default": "gemini-3.8-flash" },
+      { "key": "promptforge.llm.max-tokens", "env": "LLM_MAX_TOKENS", "default": 4000 },
+      { "key": "promptforge.llm.timeout-seconds", "env": "LLM_TIMEOUT_SECONDS", "default": 60 },
+      { "key": "server.port", "env": "SERVER_PORT", "default": 8080 }
+    ],
+    "secretsPolicy": "No key is ever committed. Keys come from environment variables only and are read through Spring configuration properties."
+  },
+
+  "quality": {
+    "testStrategy": {
+      "approach": "Behavioural tests over the public surface of the domain core, plus an HTTP-level test of the controller.",
+      "layers": [
+        { "layer": "domain", "class": "PromptAnalyzerTest", "focus": "scoring, politeness stripping, contradiction detection, stack de-duplication, constraint clause extraction, format detection, example extraction" },
+        { "layer": "domain", "class": "PromptRewriterTest", "focus": "section completeness, placeholder policy, constraint carry-over, request preservation" },
+        { "layer": "web", "class": "PromptControllerTest", "focus": "success path, blank-prompt validation, metadata endpoint, health endpoint" }
+      ],
+      "totalTests": 32,
+      "command": "mvnw test"
+    },
+    "engineeringPractices": [
+      "Immutable records for all payloads; no setters on domain types.",
+      "Enums carry behaviour-adjacent data (weights, labels, defaults) instead of scattering magic numbers.",
+      "Regexes are named constants, never inlined literals.",
+      "Every diagnostic carries a prompt-specific suggestion, not generic advice.",
+      "The LLM path is strictly additive: no provider call can break a request."
+    ]
+  },
+
+  "deployment": {
+    "packaging": "executable jar (Spring Boot repackage)",
+    "run": "java -jar target/prompt-forge-1.0.0.jar",
+    "develop": "mvnw spring-boot:run",
+    "staticContent": "served from the classpath at /",
+    "healthCheck": "GET /api/health",
+    "notes": "Single stateless process. No database, no session state, no migration step."
+  },
+
+  "nonFunctionalSummary": {
+    "determinism": "The rule engine returns the same output for the same input, on every platform.",
+    "offlineCapability": "Full functionality with no API key and no network access.",
+    "latency": "Local analysis is single-pass regex work over the prompt; no I/O on the RULE path.",
+    "privacy": "Prompt content never leaves the machine unless the caller explicitly selects the LLM engine.",
+    "resilience": "Provider outage or malformed provider output degrades to the local engine with a note."
+  }
+}

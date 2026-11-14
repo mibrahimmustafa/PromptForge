@@ -18,6 +18,13 @@ Thumbs.db
 # Logs
 *.log
 
-# Local overrides - never commit API keys
-application-local.yml
-.env
+# ---------------------------------------------------------------- secrets
+# The filled-in environment file must never be committed.
+deploy/prompt-forge.env
+!deploy/prompt-forge.env.example
+
+# TLS material and password files
+deploy/nginx/certs/
+deploy/nginx/htpasswd
+*.pem
+*.key

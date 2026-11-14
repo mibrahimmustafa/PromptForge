@@ -252,7 +252,10 @@
 
         $("reshaped-prompt").textContent = result.reshapedPrompt;
         $("template-prompt").textContent = result.templatePrompt;
-        $("reshaped-note").textContent = "Ready to paste - sections: role, task, context, constraints, format, acceptance.";
+        var strict = $("strict").checked;
+        $("reshaped-note").textContent = strict
+            ? "Template mode - the placeholders are kept so you can fill the gaps yourself."
+            : "Ready to paste - sections: role, task, context, constraints, format, acceptance.";
 
         var questions = $("questions");
         questions.innerHTML = "";

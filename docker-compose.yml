@@ -1,0 +1,88 @@
+# PromptForge - production compose stack.
+#
+#   cp deploy/prompt-forge.env deploy/prompt-forge.env   # then fill in the keys
+#   chmod 600 deploy/prompt-forge.env
+#   docker compose up -d --build
+#
+# The app is bound to loopback only - nginx (or your own reverse proxy) is the
+# public entry point.
+
+services:
+  prompt-forge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: prompt-forge:1.0.0
+    container_name: prompt-forge
+    restart: unless-stopped
+
+    env_file:
+      - path: deploy/prompt-forge.env
+        required: false   # optional: without it the app runs on the local engine only
+    environment:
+      SERVER_PORT: "8080"
+      # Trust X-Forwarded-* headers sent by the reverse proxy in front of us.
+      FORWARD_HEADERS_STRATEGY: framework
+
+    # Published on loopback only. Put TLS in front of this.
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 256M
+
+    # The process never writes to disk.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64M
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ------------------------------------------------------------------ reverse proxy
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: prompt-forge-nginx
+    restart: unless-stopped
+    depends_on:
+      prompt-forge:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # The compose variant of the proxy config: the upstream points at the
+      # service name instead of loopback.
+      - ./deploy/nginx/prompt-forge.compose.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/certs:/etc/nginx/certs:ro
+      - ./deploy/nginx/html:/usr/share/nginx/html:ro
+      # Uncomment to protect the app with HTTP basic auth.
+      # - ./deploy/nginx/htpasswd:/etc/nginx/.htpasswd:ro
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

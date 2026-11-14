@@ -211,4 +211,14 @@ class PromptAnalyzerTest {
         assertThat(analysis.extractedExamples()).isEmpty();
         assertThat(analysis.has(com.promptforge.core.model.Dimension.EXAMPLES)).isTrue();
     }
+
+    @Test
+    @DisplayName("a known stack earns partial context credit")
+    void knownStackEarnsPartialContextCredit() {
+        PromptAnalysis analysis = analyzer.analyze("spring boot pagination for orders", PromptProfile.CODING);
+
+        assertThat(analysis.detectedStack()).contains("Spring Boot");
+        assertThat(analysis.scoreOf(Dimension.CONTEXT)).isEqualTo(0.5);
+        assertThat(analysis.diagnostics()).anyMatch(d -> d.code().equals("NO_TASK"));
+    }
 }

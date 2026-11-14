@@ -51,6 +51,41 @@ class PromptControllerTest {
     }
 
     @Test
+    @DisplayName("template mode keeps the placeholders in the reshaped prompt")
+    void strictModeKeepsPlaceholders() throws Exception {
+        String body = """
+                {
+                  "prompt": "can you write a good post about our new api",
+                  "profile": "WRITING",
+                  "engine": "RULE",
+                  "strict": true
+                }
+                """;
+
+        mockMvc.perform(post("/api/reshape").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reshapedPrompt").value(org.hamcrest.Matchers.containsString("<")))
+                .andExpect(jsonPath("$.analysis.score").isNumber());
+    }
+
+    @Test
+    @DisplayName("the default mode fills the gaps so the reshaped prompt has no placeholders")
+    void defaultModeFillsTheGaps() throws Exception {
+        String body = """
+                {
+                  "prompt": "can you write a good post about our new api",
+                  "profile": "WRITING",
+                  "engine": "RULE"
+                }
+                """;
+
+        mockMvc.perform(post("/api/reshape").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reshapedPrompt").value(
+                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<"))));
+    }
+
+    @Test
     @DisplayName("GET /api/meta exposes the profiles and the prompt anatomy")
     void metaExposesProfiles() throws Exception {
         mockMvc.perform(get("/api/meta"))

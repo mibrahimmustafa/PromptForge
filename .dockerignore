@@ -1,0 +1,16 @@
+# Keep the build context small and reproducible.
+target/
+.git/
+.gitignore
+.idea/
+.vscode/
+*.iml
+*.log
+docs/
+README.md
+architecture.json
+Dockerfile
+.dockerignore
+docker-compose.yml
+deploy/
+.github/

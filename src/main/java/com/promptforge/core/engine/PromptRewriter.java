@@ -191,6 +191,10 @@ public class PromptRewriter {
      * already carried by the context, constraints and format sections - repeating it here
      * would make the prompt longer without adding information.
      *
+     * <p>When no action could be extracted the user's own request is quoted instead, so the
+     * reshaped prompt still carries the intent instead of pointing at a request that is not
+     * in the document.
+     *
      * @param analysis the analysis
      * @param taskType the detected task type
      * @return the task line
@@ -199,8 +203,15 @@ public class PromptRewriter {
         if (analysis.taskStatement() != null && !analysis.taskStatement().isBlank()) {
             return TextUtil.asSentence(analysis.taskStatement().trim());
         }
-        return "Produce a clear, complete " + taskType.label().toLowerCase(Locale.ROOT)
-                + " response that fulfils the request below, following the format and constraints above.";
+        String request = analysis.cleanedRequest() != null && !analysis.cleanedRequest().isBlank()
+                ? analysis.cleanedRequest().trim()
+                : analysis.original().trim();
+        if (request.isEmpty()) {
+            return "Produce a clear, complete " + taskType.label().toLowerCase(Locale.ROOT)
+                    + " response that follows the format and constraints above.";
+        }
+        return "Fulfil the request below completely, following the format and constraints above.\n\n"
+                + "\"" + request + "\"";
     }
 
     private String defaultGoal(TaskType taskType) {

@@ -97,4 +97,24 @@ class PromptRewriterTest {
         PromptRewriter.RewriteOutput output = rewrite("", PromptProfile.GENERALIST);
         assertThat(output.reshaped()).isNotBlank();
     }
+
+    @Test
+    @DisplayName("the original request survives when no action can be extracted")
+    void originalRequestSurvivesWithoutATask() {
+        PromptRewriter.RewriteOutput output = rewrite("spring boot pagination for orders", PromptProfile.CODING);
+
+        assertThat(output.reshaped()).contains("spring boot pagination for orders");
+        assertThat(output.reshaped()).doesNotContain("the request below, following");
+        assertThat(output.reshaped()).contains("Fulfil the request below completely");
+    }
+
+    @Test
+    @DisplayName("a request wrapped in politeness is quoted without the wrapper")
+    void politenessWrapperIsRemovedFromTheQuotedRequest() {
+        PromptRewriter.RewriteOutput output = rewrite("can you spring boot pagination for orders",
+                PromptProfile.CODING);
+
+        assertThat(output.reshaped()).contains("spring boot pagination for orders");
+        assertThat(output.reshaped()).doesNotContain("can you spring boot");
+    }
 }

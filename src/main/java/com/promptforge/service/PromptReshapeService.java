@@ -56,23 +56,37 @@ public class PromptReshapeService {
         PromptRewriter.RewriteOutput rewrite =
                 rewriter.rewrite(analysis, profile, request.includeExamplesOrDefault());
 
+        // Template mode keeps the placeholders visible in the reshaped prompt itself, so the
+        // user fills the gaps in rather than accepting the defaults.
+        boolean strict = request.strictOrDefault();
+        String reshaped = strict ? rewrite.template() : rewrite.reshaped();
+
         if (engine == Engine.RULE) {
-            return new PromptResult(analysis.original(), rewrite.reshaped(), rewrite.template(),
+            return new PromptResult(analysis.original(), reshaped, rewrite.template(),
                     rewrite.questions(), analysis, Engine.RULE.label(), List.of());
         }
 
-        return reshapeWithLlm(request, analysis, rewrite);
+        if (strict) {
+            // The LLM path fills the gaps by design - template mode explicitly does not want that.
+            List<String> notes = List.of("Template mode keeps the placeholders, so the LLM upgrade "
+                    + "was skipped. Switch the engine back to Rule-based or turn template mode off "
+                    + "for a fully rewritten prompt.");
+            return new PromptResult(analysis.original(), reshaped, rewrite.template(),
+                    rewrite.questions(), analysis, "Template mode", notes);
+        }
+
+        return reshapeWithLlm(request, analysis, rewrite, reshaped);
     }
 
     private PromptResult reshapeWithLlm(PromptRequest request, PromptAnalysis analysis,
-                                        PromptRewriter.RewriteOutput rewrite) {
+                                        PromptRewriter.RewriteOutput rewrite, String reshaped) {
         List<String> notes = new ArrayList<>();
         Optional<LlmClient> client = gateway.resolve(request.provider(), request.model());
 
         if (client.isEmpty()) {
             notes.add("No LLM provider is configured (set ANTHROPIC_API_KEY, OPENAI_API_KEY or "
                     + "GEMINI_API_KEY). Falling back to the local engine.");
-            return new PromptResult(analysis.original(), rewrite.reshaped(), rewrite.template(),
+            return new PromptResult(analysis.original(), reshaped, rewrite.template(),
                     rewrite.questions(), analysis, Engine.RULE.label() + " (fallback)", notes);
         }
 
@@ -80,23 +94,23 @@ public class PromptReshapeService {
         try {
             String raw = llm.complete(systemPrompt(), userPrompt(analysis, rewrite));
             LlmPayload payload = parse(raw);
-            String reshaped = payload.reshapedPrompt() != null && !payload.reshapedPrompt().isBlank()
+            String llmPrompt = payload.reshapedPrompt() != null && !payload.reshapedPrompt().isBlank()
                     ? payload.reshapedPrompt()
-                    : rewrite.reshaped();
+                    : reshaped;
             List<String> questions = payload.questions().isEmpty()
                     ? rewrite.questions()
                     : payload.questions();
             notes.add("Rewritten by " + llm.provider() + " (" + llm.model() + "), grounded in "
                     + analysis.diagnostics().size() + " analyzer findings.");
-            return new PromptResult(analysis.original(), reshaped, rewrite.template(), questions,
+            return new PromptResult(analysis.original(), llmPrompt, rewrite.template(), questions,
                     analysis, llm.provider() + " / " + llm.model(), notes);
         } catch (LlmException e) {
             notes.add("LLM call failed (" + e.getMessage() + "). Falling back to the local engine.");
-            return new PromptResult(analysis.original(), rewrite.reshaped(), rewrite.template(),
+            return new PromptResult(analysis.original(), reshaped, rewrite.template(),
                     rewrite.questions(), analysis, Engine.RULE.label() + " (fallback)", notes);
         } catch (RuntimeException e) {
             notes.add("LLM response could not be parsed (" + e.getMessage() + "). Falling back to the local engine.");
-            return new PromptResult(analysis.original(), rewrite.reshaped(), rewrite.template(),
+            return new PromptResult(analysis.original(), reshaped, rewrite.template(),
                     rewrite.questions(), analysis, Engine.RULE.label() + " (fallback)", notes);
         }
     }

@@ -2,6 +2,13 @@ server:
   port: ${SERVER_PORT:8080}
   error:
     include-message: always
+  # Honour X-Forwarded-* from the reverse proxy (nginx, Traefik, ALB).
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:framework}
+  shutdown: graceful
+  tomcat:
+    threads:
+      max: ${TOMCAT_MAX_THREADS:100}
+    max-connections: ${TOMCAT_MAX_CONNECTIONS:8192}
 
 spring:
   application:
